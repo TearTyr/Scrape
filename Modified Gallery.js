@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
-// @version      1.0
-// @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
+// @version      1.1
+// @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, CAN do cross-origin image downloads with JS alone.
 // @author       ntf
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
@@ -12,11 +12,15 @@
 
 // Define constants for button labels
 const DLALL = '【DL ALL】';
+// bugged
 const DL = '【DOWNLOAD】';
 const WIDTH = '【FILL WIDTH】';
 const HEIGHT = '【FILL HEIGHT】';
 const FULL = '【FULL】';
 const RM = '【REMOVE】';
+
+let autoDownload = false;
+let nextButton = document.querySelector('.post__nav-link.next');
 
 function Height() {
     document.querySelectorAll('.post__image').forEach(img => height(img));
@@ -66,59 +70,42 @@ function removeImg(evt) {
     evt.currentTarget.parentNode.remove();
 }
 
-// Function to download an image
 function downloadImg(evt) {
-  // Get the source URL of the image
   const imgSrc = evt.currentTarget.parentNode.nextElementSibling.lastElementChild.getAttribute('src');
-  // Get the title and username information from the post
   const titleElement = document.querySelector('.post__title');
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
   const username = document.querySelector('.post__user-name').textContent.trim();
-  // Construct a filename for the downloaded image
   const imgName = `${title}_${username}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
-  // Fetch the image data as a blob
   fetch(imgSrc)
     .then(response => response.blob())
     .then(blob => {
-      // Create a download link for the image blob
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = imgName;
-      // Programmatically click the download link and then remove it from the document
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      // Revoke the object URL to free up memory
       window.URL.revokeObjectURL(url);
     });
 }
 
-// Function to download all images on the page in their original resolution
 function DownloadAllImages() {
-  // Select all full-size image elements on the page
   const images = document.querySelectorAll('.post__image');
-  // Iterate over the images and download each one with a delay between downloads
   images.forEach((img, index) => {
-    // Get the source URL of the image
     const imgSrc = img.getAttribute('src');
-    // Get the title and username information from the post
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
     const username = document.querySelector('.post__user-name').textContent.trim();
-    // Construct a filename for the downloaded image
     const imgName = `${title}_${username}_${index}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
-    // Fetch the image data as a blob with a delay based on the index
     setTimeout(() => {
       fetch(imgSrc)
         .then(response => response.blob())
         .then(blob => {
-          // Create a download link for the image blob
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
           a.download = imgName;
-          // Programmatically click the download link and then remove it from the document
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -128,7 +115,54 @@ function DownloadAllImages() {
   });
 }
 
+function AutoDownloadAllImages() {
+  if (!autoDownload) {
+    return;
+  }
+  const images = document.querySelectorAll('.post__image');
+  const currentLink = document.querySelector('.post__nav-link.current');
+const currentIndex = currentLink ? parseInt(currentLink.textContent) - 1 : 0;
+  if (currentIndex >= images.length) {
+    return;
+  }
+  const currentImage = images[currentIndex];
+  const imgSrc = currentImage.getAttribute('src');
+  const titleElement = document.querySelector('.post__title');
+  const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+  const username = document.querySelector('.post__user-name').textContent.trim();
+  const imgName = `${title}_${username}_${currentIndex}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
+  setTimeout(() => {
+    fetch(imgSrc)
+      .then(response => response.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = imgName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        setTimeout(() => {
+          nextButton.click();
+          AutoDownloadAllImages();
+        }, Math.floor(Math.random() * 1000) + 1000); // Add random delay between 1-2 seconds
+      });
+  }, 250);
+}
 
+function toggleAutoDownload() {
+  if (autoDownload) {
+    autoDownload = false;
+    alert('Auto-download disabled.');
+  } else {
+    autoDownload = true;
+    alert('Auto-download enabled.');
+    AutoDownloadAllImages();
+  }
+}
+
+// Main Script
 (function() {
     'use strict';
 
@@ -152,6 +186,5 @@ function DownloadAllImages() {
 
     Full();
 
-    document.querySelector('.post__actions').append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full), newToggle(DLALL, DownloadAllImages));
-
+    document.querySelector('.post__actions').append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full), newToggle(DLALL, DownloadAllImages), newToggle(`AUTO DL : ${autoDownload ? 'ON' : 'OFF'}`, toggleAutoDownload, 'toggleAutoDownload'));
 })();
